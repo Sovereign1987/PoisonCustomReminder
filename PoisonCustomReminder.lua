@@ -318,17 +318,12 @@ local inputID = CreateFrame("EditBox", nil, panelCustom, "InputBoxTemplate"); in
 local dropdownType = CreateFrame("Frame", "PCR_TypeDrop", panelCustom, "UIDropDownMenuTemplate")
 dropdownType:SetPoint("LEFT", inputID, "RIGHT", -10, -2); UIDropDownMenu_SetWidth(dropdownType, 130); UIDropDownMenu_SetText(dropdownType, L["Buff (Spell ID)"]); dropdownType.selectedValue = "buff_spell"
 
--- Enable In HEADER
-local enableHeader = panelCustom:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-enableHeader:SetPoint("TOPLEFT", 185, -80) 
-enableHeader:SetText(L["Enable in:"])
+-- (REMOVED enableHeader HERE)
 
 UIDropDownMenu_Initialize(dropdownType, function(self, level, menuList)
     local info = UIDropDownMenu_CreateInfo()
     info.text = L["Buff (Spell ID)"]; info.tooltipTitle = L["Buff (Spell ID)"]; info.tooltipText = L["Reminder for Buffs like Food, Raidbuffs etc."]; info.tooltipOnButton = 1; info.func = function() UIDropDownMenu_SetText(dropdownType, L["Buff (Spell ID)"]); dropdownType.selectedValue="buff_spell" end; UIDropDownMenu_AddButton(info)
-    -- UMBENANNT ZU Buff (Item ID)
     info.text = L["Buff (Item ID)"]; info.tooltipTitle = L["Buff (Item ID)"]; info.tooltipText = L["Reminder for Flask and Runes"]; info.tooltipOnButton = 1; info.func = function() UIDropDownMenu_SetText(dropdownType, L["Buff (Item ID)"]); dropdownType.selectedValue="buff_item" end; UIDropDownMenu_AddButton(info)
-    
     info.text = L["Weapon (MH)"]; info.tooltipTitle = L["Weapon (MH)"]; info.tooltipText = L["Reminder for Mainhand Oil, Sharpening Stone"]; info.tooltipOnButton = 1; info.func = function() UIDropDownMenu_SetText(dropdownType, L["Weapon (MH)"]); dropdownType.selectedValue="weapon_mh" end; UIDropDownMenu_AddButton(info)
     info.text = L["Weapon (OH)"]; info.tooltipTitle = L["Weapon (OH)"]; info.tooltipText = L["Reminder for Offhand Oil, Sharpening Stone"]; info.tooltipOnButton = 1; info.func = function() UIDropDownMenu_SetText(dropdownType, L["Weapon (OH)"]); dropdownType.selectedValue="weapon_oh" end; UIDropDownMenu_AddButton(info)
 end)
@@ -342,7 +337,6 @@ local function RefreshCustomList()
     customContent.headers = customContent.headers or {}
     
     local y = 0
-    -- GRUPPEN UMBENANNT
     local groups = {
         { label = L["Buffs/Food"], types = { ["buff_spell"] = true } },
         { label = L["Flask/Runes"], types = { ["buff_item"] = true } },
@@ -450,4 +444,4 @@ if Settings and Settings.RegisterCanvasLayoutCategory then local category = Sett
 
 SLASH_POISONCUSTOM1 = "/pcr"
 SlashCmdList["POISONCUSTOM"] = function() if configFrame:IsShown() then configFrame:Hide() else configFrame:Show() end end
-print("|cff00ff00Poison & Custom Reminder v21.0 (Renamed Categories) geladen.|r /pcr")
+print("|cff00ff00Poison & Custom Reminder v21.1 (Cleanup) geladen.|r /pcr")
