@@ -5,13 +5,15 @@ local L = setmetatable(ns.L or {}, { __index = function(t, k) return k end })
 -- KONFIGURATION & DATEN ---------------------------------------------------
 local MAX_POISON_SLOTS = 4 
 
-local DEFAULT_SETUP = {
+-- Standard-Werte für NEUE Profile
+local DEFAULT_PROFILE_DATA = {
     raid     = { 0, 0, 0, 0 },
     party    = { 0, 0, 0, 0 },
     pvp      = { 0, 0, 0, 0 },
     arena    = { 0, 0, 0, 0 },
     none     = { 0, 0, 0, 0 },
     scenario = { 0, 0, 0, 0 },
+    customItems = {}
 }
 local EMPTY_FALLBACK = { 0, 0, 0, 0 }
 
@@ -41,6 +43,38 @@ local COL_NAME_WIDTH = 220
 local COL_CHECK_START = 270 
 local COL_CHECK_DIST = 35   
 
+-- HELPER: PROFIL MANAGEMENT -----------------------------------------------
+local function GetCurrentProfile()
+    local key = PoisonCustomDB.activeProfile or "Default"
+    if not PoisonCustomDB.profiles[key] then 
+        PoisonCustomDB.profiles[key] = CopyTable(DEFAULT_PROFILE_DATA) 
+    end
+    return PoisonCustomDB.profiles[key]
+end
+
+local function SwitchProfile(profileName)
+    if not PoisonCustomDB.profiles[profileName] then return end
+    PoisonCustomDB.activeProfile = profileName
+    if configFrame and configFrame:IsShown() then
+        if configFrame.RefreshProfiles then configFrame.RefreshProfiles() end
+    end
+    UpdateButtonsToZone() 
+    print("|cff00ff00[PCR]|r " .. L["Active Profile:"] .. " " .. profileName)
+end
+
+local function CheckSpecAutoSwitch()
+    local specIndex = GetSpecialization()
+    if not specIndex then return end
+    local specID = GetSpecializationInfo(specIndex)
+    
+    if specID and PoisonCustomDB.specLinks and PoisonCustomDB.specLinks[specID] then
+        local targetProfile = PoisonCustomDB.specLinks[specID]
+        if PoisonCustomDB.activeProfile ~= targetProfile and PoisonCustomDB.profiles[targetProfile] then
+            SwitchProfile(targetProfile)
+        end
+    end
+end
+
 -- HILFSFUNKTIONEN ---------------------------------------------------------
 local function GetIconForType(id, trackType)
     if id == 0 then return "Interface\\Buttons\\UI-GroupLoot-Pass-Up" end
@@ -59,40 +93,35 @@ end
 
 local function GetCurrentZoneType()
     local _, instanceType = GetInstanceInfo()
-    if DEFAULT_SETUP[instanceType] then return instanceType end
+    if DEFAULT_PROFILE_DATA[instanceType] then return instanceType end
     return "none"
 end
 
 -- BUTTON MANAGEMENT -------------------------------------------------------
-local function CreateGameplayButton(index)
+function CreateGameplayButton(index) 
     local btn = CreateFrame("Button", "PCR_Btn"..index, holderFrame, "SecureActionButtonTemplate")
     btn:SetSize(45, 45)
     btn:EnableMouse(true)
     btn:RegisterForClicks("AnyUp", "AnyDown")
-    
-    btn.icon = btn:CreateTexture(nil, "BACKGROUND")
-    btn.icon:SetAllPoints()
-    
+    btn.icon = btn:CreateTexture(nil, "BACKGROUND"); btn.icon:SetAllPoints()
     btn.text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     btn.text:SetPoint("TOP", btn, "BOTTOM", 0, -5)
     btn.text:SetText(L["MISSING"])
-    
     btn:Hide()
     return btn
 end
 
-local function UpdateButtonsToZone()
+function UpdateButtonsToZone() 
     if InCombatLockdown() then return end 
     local zone = GetCurrentZoneType()
+    local profile = GetCurrentProfile()
     
     local settings = EMPTY_FALLBACK
-    if IS_ROGUE then 
-        settings = PoisonCustomDB[zone] or DEFAULT_SETUP[zone] or EMPTY_FALLBACK
-    end
+    if IS_ROGUE then settings = profile[zone] or EMPTY_FALLBACK end
     
     activeCustomItems = {}
-    if PoisonCustomDB.customItems then
-        for _, item in ipairs(PoisonCustomDB.customItems) do
+    if profile.customItems then
+        for _, item in ipairs(profile.customItems) do
             if item.zones[zone] then table.insert(activeCustomItems, item) end
         end
     end
@@ -114,67 +143,72 @@ local function UpdateButtonsToZone()
                 local spellID = settings[i] or 0
                 btn.checkType = "spell"
                 btn.checkID = spellID
-                
                 local xOffset = -((visibleCount-1)*50)/2 + ((currentVisibleIndex-1)*50)
                 btn:SetPoint("CENTER", holderFrame, "CENTER", xOffset, 0)
-
                 if spellID > 0 then
-                    btn:SetAttribute("type", "spell")
-                    btn:SetAttribute("spell", spellID)
-                    btn.icon:SetTexture(C_Spell.GetSpellInfo(spellID).iconID)
-                    btn:Show() 
+                    btn:SetAttribute("type", "spell"); btn:SetAttribute("spell", spellID)
+                    btn.icon:SetTexture(C_Spell.GetSpellInfo(spellID).iconID); btn:Show() 
                 else
-                    btn:SetAttribute("type", nil)
-                    btn:Hide(); btn.checkID = 0
+                    btn:SetAttribute("type", nil); btn:Hide(); btn.checkID = 0
                 end
             else
-                btn:SetAttribute("type", nil)
-                btn:Hide(); btn.checkID = 0
+                btn:SetAttribute("type", nil); btn:Hide(); btn.checkID = 0
             end
         else
             currentVisibleIndex = currentVisibleIndex + 1
             local itemData = activeCustomItems[i - MAX_POISON_SLOTS]
-            btn.checkType = itemData.trackType 
-            btn.checkID = itemData.id
-            
+            btn.checkType = itemData.trackType; btn.checkID = itemData.id
             local xOffset = -((visibleCount-1)*50)/2 + ((currentVisibleIndex-1)*50)
             btn:SetPoint("CENTER", holderFrame, "CENTER", xOffset, 0)
-            
             if itemData.trackType == "buff_spell" then
-                btn:SetAttribute("type", "spell")
-                btn:SetAttribute("spell", itemData.id)
+                btn:SetAttribute("type", "spell"); btn:SetAttribute("spell", itemData.id)
             else
-                btn:SetAttribute("type", "item")
-                btn:SetAttribute("item", "item:"..itemData.id)
+                btn:SetAttribute("type", "item"); btn:SetAttribute("item", "item:"..itemData.id)
             end
-            
-            btn.icon:SetTexture(GetIconForType(itemData.id, itemData.trackType))
-            btn:Show()
+            btn.icon:SetTexture(GetIconForType(itemData.id, itemData.trackType)); btn:Show()
         end
     end
-    
-    for i = totalSlots + 1, #gameplayButtons do
-        gameplayButtons[i]:Hide(); gameplayButtons[i].checkID = 0
-    end
+    for i = totalSlots + 1, #gameplayButtons do gameplayButtons[i]:Hide(); gameplayButtons[i].checkID = 0 end
 end
 
--- INITIALISIERUNG ---------------------------------------------------------
+-- INITIALISIERUNG & MIGRATION ---------------------------------------------
 local initFrame = CreateFrame("Frame")
 initFrame:RegisterEvent("ADDON_LOADED")
 initFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 initFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED") 
+initFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED") 
 
 initFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
         local addonName = ...
         if addonName == ADDON_NAME then
             if not PoisonCustomDB then PoisonCustomDB = {} end
-            for _, z in ipairs(ZONES) do
-                if not PoisonCustomDB[z.key] then 
-                    PoisonCustomDB[z.key] = CopyTable(DEFAULT_SETUP[z.key] or EMPTY_FALLBACK)
+            
+            -- MIGRATION
+            if not PoisonCustomDB.profiles then
+                local oldData = {}
+                local defaultKeys = {raid=true, party=true, pvp=true, arena=true, none=true, scenario=true, customItems=true}
+                -- Kopiere alte Daten, falls vorhanden
+                for k, v in pairs(DEFAULT_PROFILE_DATA) do
+                    if PoisonCustomDB[k] then oldData[k] = CopyTable(PoisonCustomDB[k]) end
                 end
+                
+                PoisonCustomDB = {
+                    profiles = { ["Default"] = oldData },
+                    activeProfile = "Default",
+                    specLinks = {}, 
+                    position = PoisonCustomDB.position 
+                }
+                -- Fülle das Default Profil auf falls leer
+                for k, v in pairs(DEFAULT_PROFILE_DATA) do
+                    if not PoisonCustomDB.profiles["Default"][k] then
+                        PoisonCustomDB.profiles["Default"][k] = CopyTable(v)
+                    end
+                end
+                print("|cff00ff00[PCR]|r Datenbank auf Profil-System aktualisiert.")
             end
-            if not PoisonCustomDB.customItems then PoisonCustomDB.customItems = {} end
+            
+            if not PoisonCustomDB.specLinks then PoisonCustomDB.specLinks = {} end
             
             if PoisonCustomDB.position and holderFrame then
                 holderFrame:ClearAllPoints()
@@ -184,7 +218,12 @@ initFrame:SetScript("OnEvent", function(self, event, ...)
         end
         
     elseif event == "PLAYER_ENTERING_WORLD" then
+        CheckSpecAutoSwitch()
         if not InCombatLockdown() then UpdateButtonsToZone() end
+        
+    elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
+        local unit = ...
+        if unit == "player" then CheckSpecAutoSwitch() end
         
     elseif event == "GET_ITEM_INFO_RECEIVED" then
         local itemID, success = ...
@@ -217,7 +256,6 @@ watcher:SetScript("OnUpdate", function(self, elapsed)
     timer = timer + elapsed
     if timer < 0.5 then return end
     timer = 0
-    
     if InCombatLockdown() or UnitIsDeadOrGhost("player") then return end
     if EditModeManagerFrame and EditModeManagerFrame:IsShown() then return end
     if holderFrame:IsMouseEnabled() then return end 
@@ -225,7 +263,6 @@ watcher:SetScript("OnUpdate", function(self, elapsed)
     for i, btn in ipairs(gameplayButtons) do
         if btn.checkID and btn.checkID > 0 then
             local isMissing = true
-            
             if btn.checkType == "spell" or btn.checkType == "buff_spell" then
                 isMissing = (C_UnitAuras.GetPlayerAuraBySpellID(btn.checkID) == nil)
             elseif btn.checkType == "buff_item" then
@@ -238,7 +275,6 @@ watcher:SetScript("OnUpdate", function(self, elapsed)
                 local _, _, _, _, hasOH = GetWeaponEnchantInfo()
                 isMissing = not hasOH
             end
-            
             if isMissing then btn:Show() else btn:Hide() end
             btn:SetAlpha(1)
         else
@@ -267,10 +303,119 @@ CreateFrame("Button", nil, configFrame, "UIPanelCloseButton"):SetPoint("TOPRIGHT
 
 local tab1 = CreateFrame("Button", nil, configFrame, "PanelTabButtonTemplate"); tab1:SetPoint("TOPLEFT", configFrame, "BOTTOMLEFT", 10, 0); tab1:SetText(L["Poisons"]); tab1:SetID(1)
 local tab2 = CreateFrame("Button", nil, configFrame, "PanelTabButtonTemplate"); tab2:SetPoint("LEFT", tab1, "RIGHT", 5, 0); tab2:SetText(L["Custom Items"]); tab2:SetID(2)
+local tab3 = CreateFrame("Button", nil, configFrame, "PanelTabButtonTemplate"); tab3:SetPoint("LEFT", tab2, "RIGHT", 5, 0); tab3:SetText(L["Profiles"]); tab3:SetID(3)
+
 local panelPoisons = CreateFrame("Frame", nil, configFrame); panelPoisons:SetAllPoints()
 local panelCustom = CreateFrame("Frame", nil, configFrame); panelCustom:SetAllPoints(); panelCustom:Hide()
-local function SwitchTab(self) PanelTemplates_SetTab(configFrame, self:GetID()); if self:GetID()==1 then panelPoisons:Show(); panelCustom:Hide() else panelPoisons:Hide(); panelCustom:Show() end end
-tab1:SetScript("OnClick", SwitchTab); tab2:SetScript("OnClick", SwitchTab); configFrame.numTabs = 2; configFrame.Tabs = {tab1, tab2}; PanelTemplates_SetTab(configFrame, 1)
+local panelProfiles = CreateFrame("Frame", nil, configFrame); panelProfiles:SetAllPoints(); panelProfiles:Hide()
+
+local function SwitchTab(self) 
+    PanelTemplates_SetTab(configFrame, self:GetID())
+    panelPoisons:Hide(); panelCustom:Hide(); panelProfiles:Hide()
+    if self:GetID() == 1 then panelPoisons:Show()
+    elseif self:GetID() == 2 then panelCustom:Show()
+    elseif self:GetID() == 3 then panelProfiles:Show(); if configFrame.RefreshProfiles then configFrame.RefreshProfiles() end
+    end
+end
+tab1:SetScript("OnClick", SwitchTab); tab2:SetScript("OnClick", SwitchTab); tab3:SetScript("OnClick", SwitchTab)
+configFrame.numTabs = 3; configFrame.Tabs = {tab1, tab2, tab3}; PanelTemplates_SetTab(configFrame, 1)
+
+-- *** TAB 3: PROFILES UI ***
+do
+    local p = panelProfiles
+    
+    local lblActive = p:CreateFontString(nil, "OVERLAY", "GameFontNormal"); lblActive:SetPoint("TOPLEFT", 20, -50); lblActive:SetText(L["Active Profile:"])
+    local dropActive = CreateFrame("Frame", "PCR_ProfileActiveDrop", p, "UIDropDownMenuTemplate"); dropActive:SetPoint("LEFT", lblActive, "RIGHT", 0, -2); UIDropDownMenu_SetWidth(dropActive, 180)
+    
+    local lblNew = p:CreateFontString(nil, "OVERLAY", "GameFontNormal"); lblNew:SetPoint("TOPLEFT", 20, -100); lblNew:SetText(L["Create New Profile"])
+    local inputNew = CreateFrame("EditBox", nil, p, "InputBoxTemplate"); inputNew:SetSize(150, 30); inputNew:SetPoint("TOPLEFT", 20, -120); inputNew:SetAutoFocus(false); inputNew:SetText(L["Enter profile name"])
+    local btnCreate = CreateFrame("Button", nil, p, "GameMenuButtonTemplate"); btnCreate:SetSize(100, 25); btnCreate:SetPoint("LEFT", inputNew, "RIGHT", 10, 0); btnCreate:SetText(L["Create"])
+    
+    local lblCopy = p:CreateFontString(nil, "OVERLAY", "GameFontNormal"); lblCopy:SetPoint("TOPLEFT", 20, -170); lblCopy:SetText(L["Copy from:"])
+    local dropCopy = CreateFrame("Frame", "PCR_ProfileCopyDrop", p, "UIDropDownMenuTemplate"); dropCopy:SetPoint("TOPLEFT", 20, -190); UIDropDownMenu_SetWidth(dropCopy, 180)
+    local btnCopy = CreateFrame("Button", nil, p, "GameMenuButtonTemplate"); btnCopy:SetSize(100, 25); btnCopy:SetPoint("LEFT", dropCopy, "RIGHT", 130, 2); btnCopy:SetText(L["Copy"])
+    
+    local btnDelete = CreateFrame("Button", nil, p, "GameMenuButtonTemplate"); btnDelete:SetSize(120, 25); btnDelete:SetPoint("TOPRIGHT", -30, -50); btnDelete:SetText(L["Delete Profile"])
+    
+    local lblSpecs = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightMedium"); lblSpecs:SetPoint("TOPLEFT", 20, -260); lblSpecs:SetText(L["Auto-Switch for Specs:"])
+    
+    local checkboxes = {}
+    
+    local function RefreshProfileUI()
+        UIDropDownMenu_SetText(dropActive, PoisonCustomDB.activeProfile)
+        UIDropDownMenu_Initialize(dropActive, function(self, level)
+            for k, v in pairs(PoisonCustomDB.profiles) do
+                local info = UIDropDownMenu_CreateInfo(); info.text = k; info.func = function() SwitchProfile(k) end; UIDropDownMenu_AddButton(info)
+            end
+        end)
+        
+        UIDropDownMenu_SetText(dropCopy, "")
+        UIDropDownMenu_Initialize(dropCopy, function(self, level)
+            for k, v in pairs(PoisonCustomDB.profiles) do
+                local info = UIDropDownMenu_CreateInfo(); info.text = k; info.func = function() UIDropDownMenu_SetText(dropCopy, k); dropCopy.selected = k end; UIDropDownMenu_AddButton(info)
+            end
+        end)
+        
+        local numSpecs = GetNumSpecializations()
+        for i=1, numSpecs do
+            if not checkboxes[i] then
+                local cb = CreateFrame("CheckButton", nil, p, "UICheckButtonTemplate")
+                cb:SetPoint("TOPLEFT", 30, -290 - ((i-1)*30))
+                cb.text = cb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                cb.text:SetPoint("LEFT", cb, "RIGHT", 5, 0)
+                cb:SetScript("OnClick", function(self)
+                    local specID = self.specID
+                    if self:GetChecked() then
+                        PoisonCustomDB.specLinks[specID] = PoisonCustomDB.activeProfile
+                    else
+                        PoisonCustomDB.specLinks[specID] = nil
+                    end
+                    RefreshProfileUI()
+                end)
+                checkboxes[i] = cb
+            end
+            
+            local id, name = GetSpecializationInfo(i)
+            checkboxes[i].specID = id
+            local linkedProfile = PoisonCustomDB.specLinks[id]
+            checkboxes[i]:SetChecked(linkedProfile == PoisonCustomDB.activeProfile)
+            
+            if linkedProfile and linkedProfile ~= PoisonCustomDB.activeProfile then
+                checkboxes[i].text:SetText(name .. " (|cff888888" .. linkedProfile .. "|r)")
+            else
+                checkboxes[i].text:SetText(name)
+            end
+            checkboxes[i]:Show()
+        end
+    end
+    configFrame.RefreshProfiles = RefreshProfileUI
+    
+    btnCreate:SetScript("OnClick", function()
+        local name = inputNew:GetText()
+        if name and name ~= "" and not PoisonCustomDB.profiles[name] then
+            PoisonCustomDB.profiles[name] = CopyTable(DEFAULT_PROFILE_DATA)
+            SwitchProfile(name)
+            inputNew:SetText("")
+            print(L["Profile created."])
+        end
+    end)
+    
+    btnCopy:SetScript("OnClick", function()
+        local source = dropCopy.selected
+        if source and PoisonCustomDB.profiles[source] then
+            PoisonCustomDB.profiles[PoisonCustomDB.activeProfile] = CopyTable(PoisonCustomDB.profiles[source])
+            UpdateButtonsToZone()
+            print(L["Profile copied."])
+        end
+    end)
+    
+    btnDelete:SetScript("OnClick", function()
+        if PoisonCustomDB.activeProfile == "Default" then print(L["Cannot delete default profile."]); return end
+        PoisonCustomDB.profiles[PoisonCustomDB.activeProfile] = nil
+        SwitchProfile("Default")
+        print(L["Profile deleted."])
+    end)
+end
 
 -- TAB 1: GIFT MATRIX
 if IS_ROGUE then
@@ -290,7 +435,10 @@ if IS_ROGUE then
             local row = math.floor((i-1)/cols); local col = (i-1)%cols
             btn:ClearAllPoints(); btn:SetPoint("TOPLEFT", 10+(col*35), -10-(row*35))
             btn.sid = poison.id; btn:GetRegions():SetTexture(GetIconForType(poison.id, "buff_spell")) 
-            btn:SetScript("OnClick", function() PoisonCustomDB[zoneKey][slotIndex]=poison.id; selectionFrame:Hide(); anchorFrame.icon:SetTexture(GetIconForType(poison.id, "buff_spell")); UpdateButtonsToZone() end)
+            btn:SetScript("OnClick", function() 
+                local p = GetCurrentProfile(); p[zoneKey][slotIndex]=poison.id
+                selectionFrame:Hide(); anchorFrame.icon:SetTexture(GetIconForType(poison.id, "buff_spell")); UpdateButtonsToZone() 
+            end)
             btn:Show()
         end
         local rows = math.ceil(#ALL_POISONS/cols); selectionFrame:SetWidth(10+(cols*35)); selectionFrame:SetHeight(10+(rows*35)+10); selectionFrame:Show()
@@ -303,7 +451,10 @@ if IS_ROGUE then
         for slot=1, MAX_POISON_SLOTS do
             local b = CreateFrame("Button", nil, panelPoisons); b:SetSize(36, 36); b:SetPoint("TOPLEFT", startX+((slot-1)*colWidth), y); b.icon = b:CreateTexture(nil, "BACKGROUND"); b.icon:SetAllPoints()
             b:SetScript("OnClick", function(s) OpenSelection(s, zoneData.key, slot) end)
-            b:SetScript("OnShow", function(s) if PoisonCustomDB[zoneData.key] then s.icon:SetTexture(GetIconForType(PoisonCustomDB[zoneData.key][slot] or 0, "buff_spell")) end end)
+            b:SetScript("OnShow", function(s) 
+                local p = GetCurrentProfile()
+                if p[zoneData.key] then s.icon:SetTexture(GetIconForType(p[zoneData.key][slot] or 0, "buff_spell")) end 
+            end)
         end
     end
 else
@@ -317,8 +468,6 @@ local inputID = CreateFrame("EditBox", nil, panelCustom, "InputBoxTemplate"); in
 
 local dropdownType = CreateFrame("Frame", "PCR_TypeDrop", panelCustom, "UIDropDownMenuTemplate")
 dropdownType:SetPoint("LEFT", inputID, "RIGHT", -10, -2); UIDropDownMenu_SetWidth(dropdownType, 130); UIDropDownMenu_SetText(dropdownType, L["Buff (Spell ID)"]); dropdownType.selectedValue = "buff_spell"
-
--- (REMOVED enableHeader HERE)
 
 UIDropDownMenu_Initialize(dropdownType, function(self, level, menuList)
     local info = UIDropDownMenu_CreateInfo()
@@ -336,6 +485,7 @@ local function RefreshCustomList()
     customContent.rows = customContent.rows or {}
     customContent.headers = customContent.headers or {}
     
+    local profile = GetCurrentProfile() 
     local y = 0
     local groups = {
         { label = L["Buffs/Food"], types = { ["buff_spell"] = true } },
@@ -346,43 +496,31 @@ local function RefreshCustomList()
     
     for _, group in ipairs(groups) do
         local hasItems = false
-        for _, item in ipairs(PoisonCustomDB.customItems) do
-            if group.types[item.trackType] then hasItems = true break end
+        if profile.customItems then
+            for _, item in ipairs(profile.customItems) do
+                if group.types[item.trackType] then hasItems = true break end
+            end
         end
         
         if hasItems then
             headerCount = headerCount + 1
             local header = customContent.headers[headerCount]
             if not header then
-                header = CreateFrame("Frame", nil, customContent)
-                header:SetSize(520, 20)
-                header.title = header:CreateFontString(nil, "OVERLAY", "GameFontHighlightMedium")
-                header.title:SetPoint("LEFT", 10, 0)
-                
+                header = CreateFrame("Frame", nil, customContent); header:SetSize(520, 20)
+                header.title = header:CreateFontString(nil, "OVERLAY", "GameFontHighlightMedium"); header.title:SetPoint("LEFT", 10, 0)
                 header.cols = {}
                 for i, z in ipairs(ZONES) do
-                    local colFrame = CreateFrame("Frame", nil, header)
-                    colFrame:SetSize(24, 20)
+                    local colFrame = CreateFrame("Frame", nil, header); colFrame:SetSize(24, 20)
                     colFrame:SetPoint("LEFT", COL_CHECK_START + ((i-1)*COL_CHECK_DIST) - 4, 0) 
-                    
-                    local txt = colFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-                    txt:SetPoint("CENTER")
-                    txt:SetText(string.sub(z.label, 1, 1))
-                    
-                    colFrame:SetScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText(z.label); GameTooltip:Show() end)
-                    colFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                    local txt = colFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); txt:SetPoint("CENTER"); txt:SetText(string.sub(z.label, 1, 1))
+                    colFrame:SetScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText(z.label); GameTooltip:Show() end); colFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
                     header.cols[i] = colFrame
                 end
-                
                 customContent.headers[headerCount] = header
             end
+            header:SetPoint("TOPLEFT", 0, y); header.title:SetText(group.label); header:Show(); y = y - 25
             
-            header:SetPoint("TOPLEFT", 0, y)
-            header.title:SetText(group.label)
-            header:Show()
-            y = y - 25
-            
-            for idx, item in ipairs(PoisonCustomDB.customItems) do
+            for idx, item in ipairs(profile.customItems) do
                 if group.types[item.trackType] then
                     local row = customContent.rows[idx]
                     if not row then
@@ -398,31 +536,36 @@ local function RefreshCustomList()
                         end
                         customContent.rows[idx] = row
                     end
-                    
                     row:SetPoint("TOPLEFT", 0, y)
                     row.icon:SetTexture(GetIconForType(item.id, item.trackType))
-                    
                     local display = "ID: "..item.id
-                    if item.trackType == "buff_spell" then
-                        local info = C_Spell.GetSpellInfo(item.id); if info then display = info.name end
-                    else
-                        local name = GetItemInfo(item.id); if name then display = name end
-                    end
+                    if item.trackType == "buff_spell" then local info = C_Spell.GetSpellInfo(item.id); if info then display = info.name end
+                    else local name = GetItemInfo(item.id); if name then display = name end end
                     if item.trackType == "weapon_mh" then display = display .. " |cff00ccff" .. L["(Main Hand)"] .. "|r" end
                     if item.trackType == "weapon_oh" then display = display .. " |cff00ccff" .. L["(Off Hand)"] .. "|r" end
-
                     row.name:SetText(display)
-                    row.del:SetScript("OnClick", function() table.remove(PoisonCustomDB.customItems, idx); RefreshCustomList(); UpdateButtonsToZone() end)
-                    for key, cb in pairs(row.checks) do cb:SetChecked(item.zones[key]); cb:SetScript("OnClick", function() item.zones[key] = cb:GetChecked(); UpdateButtonsToZone() end) end
-                    row:Show()
-                    y = y - 45
+                    
+                    row.del:SetScript("OnClick", function() table.remove(profile.customItems, idx); RefreshCustomList(); UpdateButtonsToZone() end)
+                    for key, cb in pairs(row.checks) do 
+                        cb:SetChecked(item.zones[key])
+                        cb:SetScript("OnClick", function() item.zones[key] = cb:GetChecked(); UpdateButtonsToZone() end) 
+                    end
+                    row:Show(); y = y - 45
                 end
             end
             y = y - 10 
         end
     end
 end
-addBtn:SetScript("OnClick", function() local id = tonumber(inputID:GetText()); if id and id > 0 then table.insert(PoisonCustomDB.customItems, {id = id, trackType = dropdownType.selectedValue, zones = { raid=true, party=true, pvp=true, arena=true, none=true, scenario=true }}); inputID:SetText(""); RefreshCustomList(); UpdateButtonsToZone() else print(L["Invalid ID"]) end end)
+addBtn:SetScript("OnClick", function() 
+    local id = tonumber(inputID:GetText())
+    if id and id > 0 then 
+        local p = GetCurrentProfile()
+        if not p.customItems then p.customItems = {} end
+        table.insert(p.customItems, {id = id, trackType = dropdownType.selectedValue, zones = { raid=true, party=true, pvp=true, arena=true, none=true, scenario=true }})
+        inputID:SetText(""); RefreshCustomList(); UpdateButtonsToZone() 
+    else print(L["Invalid ID"]) end 
+end)
 panelCustom:SetScript("OnShow", RefreshCustomList)
 
 -- COMMON UI
@@ -444,4 +587,4 @@ if Settings and Settings.RegisterCanvasLayoutCategory then local category = Sett
 
 SLASH_POISONCUSTOM1 = "/pcr"
 SlashCmdList["POISONCUSTOM"] = function() if configFrame:IsShown() then configFrame:Hide() else configFrame:Show() end end
-print("|cff00ff00Poison & Custom Reminder v21.1 (Cleanup) geladen.|r /pcr")
+print("|cff00ff00Poison & Custom Reminder v22.1 (Profiles + Migration Fix) geladen.|r /pcr")

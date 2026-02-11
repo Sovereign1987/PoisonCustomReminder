@@ -60,4 +60,21 @@ if GetLocale() == "deDE" then
     L["Reminder for Flask and Runes"] = "Erinnerung für Items wie Phiolen und Runen"
     L["Reminder for Mainhand Oil, Sharpening Stone"] = "Erinnerung für Waffenöl oder Wetzstein auf der Haupthand"
     L["Reminder for Offhand Oil, Sharpening Stone"] = "Erinnerung für Waffenöl oder Wetzstein auf der Schildhand"
+
+	-- PROFIL SYSTEM
+    L["Profiles"] = "Profile"
+    L["Active Profile:"] = "Aktives Profil:"
+    L["Create New Profile"] = "Neues Profil erstellen"
+    L["Create"] = "Erstellen"
+    L["Copy from:"] = "Kopieren von:"
+    L["Copy"] = "Kopieren"
+    L["Delete Profile"] = "Profil löschen"
+    L["Auto-Switch for Specs:"] = "Automatisch laden bei Spezialisierung:"
+    L["Current Spec:"] = "Aktueller Spec:"
+    L["(Active)"] = "(Aktiv)"
+    L["Profile created."] = "Profil erstellt."
+    L["Profile deleted."] = "Profil gelöscht."
+    L["Profile copied."] = "Profil kopiert."
+    L["Cannot delete default profile."] = "Standard-Profil kann nicht gelöscht werden."
+    L["Enter profile name"] = "Profilname eingeben"
 end
