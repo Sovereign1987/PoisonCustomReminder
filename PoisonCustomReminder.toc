@@ -1,4 +1,4 @@
-## Interface: 120000
+## Interface: 120001, 120000
 ## Title: Poison & Custom Reminder
 ## Notes: Tracking Poison, Weapon Oil, Flasks etc.
 ## Author: Sovereign (Generated with AI)
