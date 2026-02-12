@@ -45,13 +45,13 @@ local COL_CHECK_DIST = 35
 local function GetCurrentProfile()
     local key = PoisonCustomDB.activeProfile or "Default"
     if not PoisonCustomDB.profiles[key] then 
-        PoisonCustomDB.profiles[key] = CopyTable(DEFAULT_SETUP) -- Fallback zu Default Data
+        PoisonCustomDB.profiles[key] = CopyTable(DEFAULT_SETUP) 
     end
     return PoisonCustomDB.profiles[key]
 end
 
 -- VORWÄRTSDEKLARATIONEN
-local UpdateVisuals -- Die neue Kern-Logik
+local UpdateVisuals
 
 local function SwitchProfile(profileName)
     if not PoisonCustomDB.profiles[profileName] then return end
@@ -149,9 +149,6 @@ function UpdateButtonsToZone()
         if not gameplayButtons[i] then gameplayButtons[i] = CreateGameplayButton(i) end
         local btn = gameplayButtons[i]
         
-        -- WICHTIG: Wir zeigen den Button hier NICHT mehr pauschal an (btn:Show() entfernt).
-        -- Wir konfigurieren nur. Die Sichtbarkeit macht UpdateVisuals().
-        
         if i <= MAX_POISON_SLOTS then
             if IS_ROGUE then
                 currentVisibleIndex = currentVisibleIndex + 1
@@ -163,7 +160,6 @@ function UpdateButtonsToZone()
                 if spellID > 0 then
                     btn:SetAttribute("type", "spell"); btn:SetAttribute("spell", spellID)
                     btn.icon:SetTexture(C_Spell.GetSpellInfo(spellID).iconID)
-                    -- btn:Show() -- ENTFERNT!
                 else
                     btn:SetAttribute("type", nil); btn:Hide(); btn.checkID = 0
                 end
@@ -182,18 +178,15 @@ function UpdateButtonsToZone()
                 btn:SetAttribute("type", "item"); btn:SetAttribute("item", "item:"..itemData.id)
             end
             btn.icon:SetTexture(GetIconForType(itemData.id, itemData.trackType))
-            -- btn:Show() -- ENTFERNT!
         end
     end
     for i = totalSlots + 1, #gameplayButtons do gameplayButtons[i]:Hide(); gameplayButtons[i].checkID = 0 end
     
-    -- SOFORTIGES UPDATE der Sichtbarkeit (Fix für Combat-Stuck)
     UpdateVisuals()
 end
 
--- LOGIK UPDATE (Ausgelagert für manuellen Aufruf)
+-- LOGIK UPDATE
 UpdateVisuals = function()
-    -- Sicherstellen, dass wir nicht im Kampf UI anfassen (obwohl Show/Hide hier sicher wäre, wenn wir es richtig machen, aber sicher ist sicher)
     if InCombatLockdown() or UnitIsDeadOrGhost("player") then return end
     if EditModeManagerFrame and EditModeManagerFrame:IsShown() then return end
     if holderFrame:IsMouseEnabled() then return end 
@@ -214,7 +207,6 @@ UpdateVisuals = function()
                 isMissing = not hasOH
             end
             
-            -- Hier wird die Sichtbarkeit gesteuert
             if isMissing then btn:Show() else btn:Hide() end
             btn:SetAlpha(1)
         else
@@ -236,7 +228,6 @@ initFrame:SetScript("OnEvent", function(self, event, ...)
         if addonName == ADDON_NAME then
             if not PoisonCustomDB then PoisonCustomDB = {} end
             
-            -- MIGRATION
             if not PoisonCustomDB.profiles then
                 local oldData = {}
                 for k, v in pairs(DEFAULT_SETUP) do
@@ -294,7 +285,7 @@ watcher:SetScript("OnUpdate", function(self, elapsed)
     timer = timer + elapsed
     if timer < 0.5 then return end
     timer = 0
-    UpdateVisuals() -- Ruft die ausgelagerte Funktion auf
+    UpdateVisuals() 
 end)
 
 -- HOLDER UI ---------------------------------------------------------------
@@ -328,7 +319,7 @@ local function SwitchTab(self)
     panelPoisons:Hide(); panelCustom:Hide(); panelProfiles:Hide()
     if self:GetID() == 1 then panelPoisons:Show()
     elseif self:GetID() == 2 then panelCustom:Show()
-    elseif self:GetID() == 3 then panelProfiles:Show(); if configFrame.RefreshProfiles then configFrame.RefreshProfiles() end
+    elseif self:GetID() == 3 then panelProfiles:Show() -- Auto-Refresh durch OnShow Event
     end
 end
 tab1:SetScript("OnClick", SwitchTab); tab2:SetScript("OnClick", SwitchTab); tab3:SetScript("OnClick", SwitchTab)
@@ -403,6 +394,9 @@ do
         end
     end
     configFrame.RefreshProfiles = RefreshProfileUI
+    
+    -- NEU: Trigger Refresh wenn das Panel sichtbar wird
+    p:SetScript("OnShow", RefreshProfileUI)
     
     btnCreate:SetScript("OnClick", function()
         local name = inputNew:GetText()
@@ -601,4 +595,4 @@ if Settings and Settings.RegisterCanvasLayoutCategory then local category = Sett
 
 SLASH_POISONCUSTOM1 = "/pcr"
 SlashCmdList["POISONCUSTOM"] = function() if configFrame:IsShown() then configFrame:Hide() else configFrame:Show() end end
-print("|cff00ff00Poison & Custom Reminder v23.0 (Visibility Fix) geladen.|r /pcr")
+print("|cff00ff00Poison & Custom Reminder loaded.|r /pcr")
