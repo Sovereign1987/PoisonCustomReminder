@@ -5,15 +5,13 @@ local L = setmetatable(ns.L or {}, { __index = function(t, k) return k end })
 -- KONFIGURATION & DATEN ---------------------------------------------------
 local MAX_POISON_SLOTS = 4 
 
--- Standard-Werte für NEUE Profile
-local DEFAULT_PROFILE_DATA = {
+local DEFAULT_SETUP = {
     raid     = { 0, 0, 0, 0 },
     party    = { 0, 0, 0, 0 },
     pvp      = { 0, 0, 0, 0 },
     arena    = { 0, 0, 0, 0 },
     none     = { 0, 0, 0, 0 },
     scenario = { 0, 0, 0, 0 },
-    customItems = {}
 }
 local EMPTY_FALLBACK = { 0, 0, 0, 0 }
 
@@ -47,16 +45,19 @@ local COL_CHECK_DIST = 35
 local function GetCurrentProfile()
     local key = PoisonCustomDB.activeProfile or "Default"
     if not PoisonCustomDB.profiles[key] then 
-        PoisonCustomDB.profiles[key] = CopyTable(DEFAULT_PROFILE_DATA) 
+        PoisonCustomDB.profiles[key] = CopyTable(DEFAULT_SETUP) -- Fallback zu Default Data
     end
     return PoisonCustomDB.profiles[key]
 end
 
+-- VORWÄRTSDEKLARATIONEN
+local UpdateVisuals -- Die neue Kern-Logik
+
 local function SwitchProfile(profileName)
     if not PoisonCustomDB.profiles[profileName] then return end
     PoisonCustomDB.activeProfile = profileName
-    if configFrame and configFrame:IsShown() then
-        if configFrame.RefreshProfiles then configFrame.RefreshProfiles() end
+    if configFrame and configFrame:IsShown() and configFrame.RefreshProfiles then
+        configFrame.RefreshProfiles()
     end
     UpdateButtonsToZone() 
     print("|cff00ff00[PCR]|r " .. L["Active Profile:"] .. " " .. profileName)
@@ -93,8 +94,19 @@ end
 
 local function GetCurrentZoneType()
     local _, instanceType = GetInstanceInfo()
-    if DEFAULT_PROFILE_DATA[instanceType] then return instanceType end
+    if DEFAULT_SETUP[instanceType] then return instanceType end
     return "none"
+end
+
+local function HasBuffByName(targetName)
+    if not targetName then return false end
+    for i = 1, 40 do
+        local aura = C_UnitAuras.GetAuraDataByIndex("player", i, "HELPFUL")
+        if not aura then return false end 
+        local status, result = pcall(function() return aura.name == targetName end)
+        if status and result then return true end
+    end
+    return false
 end
 
 -- BUTTON MANAGEMENT -------------------------------------------------------
@@ -137,6 +149,9 @@ function UpdateButtonsToZone()
         if not gameplayButtons[i] then gameplayButtons[i] = CreateGameplayButton(i) end
         local btn = gameplayButtons[i]
         
+        -- WICHTIG: Wir zeigen den Button hier NICHT mehr pauschal an (btn:Show() entfernt).
+        -- Wir konfigurieren nur. Die Sichtbarkeit macht UpdateVisuals().
+        
         if i <= MAX_POISON_SLOTS then
             if IS_ROGUE then
                 currentVisibleIndex = currentVisibleIndex + 1
@@ -147,7 +162,8 @@ function UpdateButtonsToZone()
                 btn:SetPoint("CENTER", holderFrame, "CENTER", xOffset, 0)
                 if spellID > 0 then
                     btn:SetAttribute("type", "spell"); btn:SetAttribute("spell", spellID)
-                    btn.icon:SetTexture(C_Spell.GetSpellInfo(spellID).iconID); btn:Show() 
+                    btn.icon:SetTexture(C_Spell.GetSpellInfo(spellID).iconID)
+                    -- btn:Show() -- ENTFERNT!
                 else
                     btn:SetAttribute("type", nil); btn:Hide(); btn.checkID = 0
                 end
@@ -165,10 +181,46 @@ function UpdateButtonsToZone()
             else
                 btn:SetAttribute("type", "item"); btn:SetAttribute("item", "item:"..itemData.id)
             end
-            btn.icon:SetTexture(GetIconForType(itemData.id, itemData.trackType)); btn:Show()
+            btn.icon:SetTexture(GetIconForType(itemData.id, itemData.trackType))
+            -- btn:Show() -- ENTFERNT!
         end
     end
     for i = totalSlots + 1, #gameplayButtons do gameplayButtons[i]:Hide(); gameplayButtons[i].checkID = 0 end
+    
+    -- SOFORTIGES UPDATE der Sichtbarkeit (Fix für Combat-Stuck)
+    UpdateVisuals()
+end
+
+-- LOGIK UPDATE (Ausgelagert für manuellen Aufruf)
+UpdateVisuals = function()
+    -- Sicherstellen, dass wir nicht im Kampf UI anfassen (obwohl Show/Hide hier sicher wäre, wenn wir es richtig machen, aber sicher ist sicher)
+    if InCombatLockdown() or UnitIsDeadOrGhost("player") then return end
+    if EditModeManagerFrame and EditModeManagerFrame:IsShown() then return end
+    if holderFrame:IsMouseEnabled() then return end 
+
+    for i, btn in ipairs(gameplayButtons) do
+        if btn.checkID and btn.checkID > 0 then
+            local isMissing = true
+            if btn.checkType == "spell" or btn.checkType == "buff_spell" then
+                isMissing = (C_UnitAuras.GetPlayerAuraBySpellID(btn.checkID) == nil)
+            elseif btn.checkType == "buff_item" then
+                local itemName = GetItemInfo(btn.checkID)
+                if itemName then isMissing = not HasBuffByName(itemName) end
+            elseif btn.checkType == "weapon_mh" then
+                local hasMH = GetWeaponEnchantInfo()
+                isMissing = not hasMH
+            elseif btn.checkType == "weapon_oh" then
+                local _, _, _, _, hasOH = GetWeaponEnchantInfo()
+                isMissing = not hasOH
+            end
+            
+            -- Hier wird die Sichtbarkeit gesteuert
+            if isMissing then btn:Show() else btn:Hide() end
+            btn:SetAlpha(1)
+        else
+            btn:Hide()
+        end
+    end
 end
 
 -- INITIALISIERUNG & MIGRATION ---------------------------------------------
@@ -187,11 +239,10 @@ initFrame:SetScript("OnEvent", function(self, event, ...)
             -- MIGRATION
             if not PoisonCustomDB.profiles then
                 local oldData = {}
-                local defaultKeys = {raid=true, party=true, pvp=true, arena=true, none=true, scenario=true, customItems=true}
-                -- Kopiere alte Daten, falls vorhanden
-                for k, v in pairs(DEFAULT_PROFILE_DATA) do
+                for k, v in pairs(DEFAULT_SETUP) do
                     if PoisonCustomDB[k] then oldData[k] = CopyTable(PoisonCustomDB[k]) end
                 end
+                if PoisonCustomDB.customItems then oldData.customItems = CopyTable(PoisonCustomDB.customItems) end
                 
                 PoisonCustomDB = {
                     profiles = { ["Default"] = oldData },
@@ -199,13 +250,11 @@ initFrame:SetScript("OnEvent", function(self, event, ...)
                     specLinks = {}, 
                     position = PoisonCustomDB.position 
                 }
-                -- Fülle das Default Profil auf falls leer
-                for k, v in pairs(DEFAULT_PROFILE_DATA) do
+                for k, v in pairs(DEFAULT_SETUP) do
                     if not PoisonCustomDB.profiles["Default"][k] then
                         PoisonCustomDB.profiles["Default"][k] = CopyTable(v)
                     end
                 end
-                print("|cff00ff00[PCR]|r Datenbank auf Profil-System aktualisiert.")
             end
             
             if not PoisonCustomDB.specLinks then PoisonCustomDB.specLinks = {} end
@@ -239,48 +288,13 @@ initFrame:SetScript("OnEvent", function(self, event, ...)
 end)
 
 -- WATCHER -----------------------------------------------------------------
-local function HasBuffByName(targetName)
-    if not targetName then return false end
-    for i = 1, 40 do
-        local aura = C_UnitAuras.GetAuraDataByIndex("player", i, "HELPFUL")
-        if not aura then return false end 
-        local status, result = pcall(function() return aura.name == targetName end)
-        if status and result then return true end
-    end
-    return false
-end
-
 local watcher = CreateFrame("Frame")
 local timer = 0
 watcher:SetScript("OnUpdate", function(self, elapsed)
     timer = timer + elapsed
     if timer < 0.5 then return end
     timer = 0
-    if InCombatLockdown() or UnitIsDeadOrGhost("player") then return end
-    if EditModeManagerFrame and EditModeManagerFrame:IsShown() then return end
-    if holderFrame:IsMouseEnabled() then return end 
-
-    for i, btn in ipairs(gameplayButtons) do
-        if btn.checkID and btn.checkID > 0 then
-            local isMissing = true
-            if btn.checkType == "spell" or btn.checkType == "buff_spell" then
-                isMissing = (C_UnitAuras.GetPlayerAuraBySpellID(btn.checkID) == nil)
-            elseif btn.checkType == "buff_item" then
-                local itemName = GetItemInfo(btn.checkID)
-                if itemName then isMissing = not HasBuffByName(itemName) end
-            elseif btn.checkType == "weapon_mh" then
-                local hasMH = GetWeaponEnchantInfo()
-                isMissing = not hasMH
-            elseif btn.checkType == "weapon_oh" then
-                local _, _, _, _, hasOH = GetWeaponEnchantInfo()
-                isMissing = not hasOH
-            end
-            if isMissing then btn:Show() else btn:Hide() end
-            btn:SetAlpha(1)
-        else
-            btn:Hide()
-        end
-    end
+    UpdateVisuals() -- Ruft die ausgelagerte Funktion auf
 end)
 
 -- HOLDER UI ---------------------------------------------------------------
@@ -393,7 +407,7 @@ do
     btnCreate:SetScript("OnClick", function()
         local name = inputNew:GetText()
         if name and name ~= "" and not PoisonCustomDB.profiles[name] then
-            PoisonCustomDB.profiles[name] = CopyTable(DEFAULT_PROFILE_DATA)
+            PoisonCustomDB.profiles[name] = CopyTable(DEFAULT_SETUP)
             SwitchProfile(name)
             inputNew:SetText("")
             print(L["Profile created."])
@@ -587,4 +601,4 @@ if Settings and Settings.RegisterCanvasLayoutCategory then local category = Sett
 
 SLASH_POISONCUSTOM1 = "/pcr"
 SlashCmdList["POISONCUSTOM"] = function() if configFrame:IsShown() then configFrame:Hide() else configFrame:Show() end end
-print("|cff00ff00Poison & Custom Reminder v22.1 (Profiles + Migration Fix) geladen.|r /pcr")
+print("|cff00ff00Poison & Custom Reminder v23.0 (Visibility Fix) geladen.|r /pcr")
