@@ -77,4 +77,12 @@ if GetLocale() == "deDE" then
     L["Profile copied."] = "Profil kopiert."
     L["Cannot delete default profile."] = "Standard-Profil kann nicht gelöscht werden."
     L["Enter profile name"] = "Profilname eingeben"
+	
+	-- Ablauf-Warnung (NEU)
+    L["Expires: "] = "Noch "
+    L["Poison Expiry Warning"] = "Gift-Ablaufwarnung"
+    L["Enable Warning"] = "Warnung aktivieren"
+    L["Raid (Min)"] = "Raid (Min)"
+    L["Dungeon (Min)"] = "Dungeon (Min)"
+	L["Enable Glow"] = "Leucht-Effekt (Glow) aktivieren"
 end
