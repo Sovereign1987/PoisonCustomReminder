@@ -97,7 +97,8 @@ local function GetIconForType(id, trackType)
         local info = C_Spell.GetSpellInfo(id)
         return info and info.iconID or 134400
     else
-        local _, _, _, _, _, _, _, _, _, icon = GetItemInfo(id)
+        -- FIX FÜR PATCH 12.1.5: C_Item.GetItemInfo statt GetItemInfo
+        local _, _, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(id)
         if not icon then 
             C_Item.RequestLoadItemDataByID(id) 
             return 134400 
@@ -138,24 +139,21 @@ function CreateGameplayButton(index)
     btn.icon = btn:CreateTexture(nil, "BACKGROUND")
     btn.icon:SetAllPoints()
     
-    -- NEU in v26.0: Auffälligerer Rahmen (Dicker & weiter außen)
     btn.border = CreateFrame("Frame", nil, btn, "BackdropTemplate")
     btn.border:SetPoint("TOPLEFT", btn, "TOPLEFT", -4, 4)
     btn.border:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 4, -4)
     btn.border:SetBackdrop({edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 18})
-    btn.border:SetBackdropBorderColor(1, 0.85, 0, 1) -- Intensives Gelb-Gold
+    btn.border:SetBackdropBorderColor(1, 0.85, 0, 1)
     btn.border:Hide()
     
-    -- NEU in v26.0: Herzschlag-Pulsieren (Alpha + Skalierung)
     btn.glowAnim = btn.border:CreateAnimationGroup()
     btn.glowAnim:SetLooping("BOUNCE")
     
     local alpha = btn.glowAnim:CreateAnimation("Alpha")
     alpha:SetFromAlpha(0.2)
     alpha:SetToAlpha(1.0)
-    alpha:SetDuration(0.35) -- Deutlich schneller
+    alpha:SetDuration(0.35)
     
-    -- Die Scale-Animation lässt den Rahmen "pumpen" (wird 15% größer)
     local scale = btn.glowAnim:CreateAnimation("Scale")
     scale:SetScale(1.15, 1.15) 
     scale:SetDuration(0.35)
@@ -238,7 +236,7 @@ function UpdateButtonsToZone()
     UpdateVisuals()
 end
 
--- LOGIK UPDATE (Mit kreisendem Glow)
+-- LOGIK UPDATE
 UpdateVisuals = function()
     if InCombatLockdown() or UnitIsDeadOrGhost("player") then return end
     if EditModeManagerFrame and EditModeManagerFrame:IsShown() then return end
@@ -272,7 +270,8 @@ UpdateVisuals = function()
                     end
                 end
             elseif btn.checkType == "buff_item" then
-                local itemName = GetItemInfo(btn.checkID)
+                -- FIX FÜR PATCH 12.1.5: C_Item.GetItemInfo
+                local itemName = C_Item.GetItemInfo(btn.checkID)
                 if itemName then isMissing = not HasBuffByName(itemName) end
             elseif btn.checkType == "weapon_mh" then
                 local hasMH = GetWeaponEnchantInfo()
@@ -388,7 +387,8 @@ initFrame:SetScript("OnEvent", function(self, event, ...)
         if success then
             for _, btn in pairs(gameplayButtons) do
                 if btn:IsShown() and btn.checkID == itemID and btn.checkType ~= "spell" and btn.checkType ~= "buff_spell" then
-                    local _, _, _, _, _, _, _, _, _, icon = GetItemInfo(itemID)
+                    -- FIX FÜR PATCH 12.1.5: C_Item.GetItemInfo
+                    local _, _, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(itemID)
                     if icon then btn.icon:SetTexture(icon) end
                 end
             end
@@ -621,7 +621,10 @@ local function RefreshCustomList()
                     row.icon:SetTexture(GetIconForType(item.id, item.trackType))
                     local display = "ID: "..item.id
                     if item.trackType == "buff_spell" then local info = C_Spell.GetSpellInfo(item.id); if info then display = info.name end
-                    else local name = GetItemInfo(item.id); if name then display = name end end
+                    else 
+                        -- FIX FÜR PATCH 12.1.5: C_Item.GetItemInfo
+                        local name = C_Item.GetItemInfo(item.id); if name then display = name end 
+                    end
                     if item.trackType == "weapon_mh" then display = display .. " |cff00ccff" .. L["(Main Hand)"] .. "|r" end
                     if item.trackType == "weapon_oh" then display = display .. " |cff00ccff" .. L["(Off Hand)"] .. "|r" end
                     row.name:SetText(display)
@@ -770,4 +773,4 @@ if Settings and Settings.RegisterCanvasLayoutCategory then local category = Sett
 
 SLASH_POISONCUSTOM1 = "/pcr"
 SlashCmdList["POISONCUSTOM"] = function() if configFrame:IsShown() then configFrame:Hide() else configFrame:Show() end end
-print("|cff00ff00Poison & Custom Reminder v26.0 (Stronger Glow) geladen.|r /pcr")
+print("|cff00ff00Poison & Custom Reminder v27.0 (WoW 12.1.5 Fix) geladen.|r /pcr")
