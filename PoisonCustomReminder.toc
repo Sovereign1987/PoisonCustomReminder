@@ -1,8 +1,8 @@
-## Interface: 120100
+## Interface: 120105
 ## Title: Poison & Custom Reminder
 ## Notes: Tracking Poison, Weapon Oil, Flasks etc.
 ## Author: Sovereign (Generated with AI)
-## Version: 1.2.1
+## Version: 1.3.2
 ## SavedVariables: PoisonCustomDB
 
 Locales\deDE.lua
